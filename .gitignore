@@ -1,0 +1,5 @@
+__pycache__
+data/
+sensor_data/
+map_*
+stereo*
