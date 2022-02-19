@@ -105,7 +105,7 @@ class Slam():
         w_x_obj = w_s_obj[0]
         w_y_obj = w_s_obj[1]
         w_z_obj = w_s_obj[2]
-        valid_z = w_z_obj < 1.2
+        valid_z = w_z_obj >0.4
 
         #Convert from meters to cells
         x_cell = np.ceil((w_x_obj - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1 
@@ -262,11 +262,11 @@ class Slam():
                     
                     x_cell = np.ceil((best_mu[0] - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1
                     # y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
-                    y_cell = np.ceil((self.MAP['ymax'] - best_mu[1]) / self.MAP['res']).astype(np.int16) - 1
+                    y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res']).astype(np.int16) - 1
                     self.MAP['pose'][count][0] = x_cell
                     self.MAP['pose'][count][1] = y_cell 
                 # print(f"trajectory of robot: {self.MAP['pose']}")
-                if count % 20000 == 0 : 
+                if count % 2000 == 0 : 
                     with open("map_parameters.pkl", 'wb') as f:
                         pickle.dump([self.MAP,self.mu, self.alpha] , f)
                     self.show_MAP(count)
