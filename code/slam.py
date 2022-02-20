@@ -112,6 +112,7 @@ class Slam():
         y_cell = np.ceil((w_y_obj - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
         sx_cell = np.ceil((sx - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1 
         sy_cell = np.ceil((sy - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
+          
         valid_x = np.logical_and((x_cell < self.MAP['sizex']), (x_cell >= 0))
         valid_y = np.logical_and((y_cell < self.MAP['sizey']), (y_cell >= 0))
         valid_xy = np.logical_and(valid_x, valid_y)
@@ -176,13 +177,6 @@ class Slam():
             world_s_lidar = w_T_robot @ robot_s_lidar
             w_x_lidar = world_s_lidar[0]
             w_y_lidar = world_s_lidar[1]
-            w_x_cell = np.ceil((w_x_lidar - self.MAP['xmin'])/ self.MAP['res']).astype(np.int16) - 1
-            w_y_cell = np.ceil((w_y_lidar - self.MAP['ymin'])/ self.MAP['res']).astype(np.int16) - 1
-            valid_x = np.logical_and((w_x_cell < self.MAP['sizex']), (w_x_cell >= 0))
-            valid_y = np.logical_and((w_y_cell < self.MAP['sizey']), (w_y_cell >=0))
-            valid_xy = np.logical_and(valid_x, valid_y)
-            # w_x_lidar = w_x_lidar[valid_xy]
-            # w_y_lidar = w_y_lidar[valid_xy]
             Y  = np.stack((w_x_lidar, w_y_lidar))
             correlation_matrix = pr2_utils.mapCorrelation(self.MAP['map'], self.x_im, self.y_im, Y, self.x_range, self.y_range)
             index = np.unravel_index(np.argmax(correlation_matrix, axis = None), correlation_matrix.shape)
@@ -224,10 +218,12 @@ class Slam():
         # for count in tqdm(range(20001)):
             if count == 0: 
                 self.build_map(0,0,0,lidar_data[count])
+                self.show_MAP(count)
             else:
                 t_n_encoder = encoder_time[count]
                 t_p_encoder = encoder_time[count-1]
                 t_n_fog = np.abs(t_n_encoder - fog_time).argmin()
+                t_p_fog = np.abs(t_p_encoder - fog_time).argmin()
                 t_n_lidar = np.abs(t_n_encoder - lidar_time).argmin()
                 zl_encoder = encoder_data[count][0] - encoder_data[count - 1][0] 
                 zr_encoder = encoder_data[count][1] - encoder_data[count - 1][1] 
@@ -236,8 +232,8 @@ class Slam():
                 vl = np.pi * dl * zl_encoder / (4096 * tau)
                 vr = np.pi * dr * zr_encoder / (4096 * tau)
                 v = (vl + vr) / 2
-                if t_n_fog < len(fog_time) - 15:
-                    w = (robot_T_FOG[:3,:3] @np.asarray([0,0, np.sum(fog_data[t_n_fog:t_n_fog + 10]) / (fog_time[t_n_fog + 10] - fog_time[t_n_fog])]))[-1]
+                
+                w = (robot_T_FOG[:3,:3] @np.asarray([0,0, np.sum(fog_data[t_n_fog:t_p_fog]) / (fog_time[t_n_fog] - fog_time[t_p_fog])]))[-1]
             
                 # print(f"Linear velocity : {v}, Angular velocity : {w}")
                 #Predict step
@@ -261,34 +257,51 @@ class Slam():
                         self.resample()
                     
                     x_cell = np.ceil((best_mu[0] - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1
-                    # y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
-                    y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res']).astype(np.int16) - 1
+                    y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
+                    
                     self.MAP['pose'][count][0] = x_cell
-                    self.MAP['pose'][count][1] = y_cell 
+                    self.MAP['pose'][count][1] = y_cell - (3750 - 2250)
                 # print(f"trajectory of robot: {self.MAP['pose']}")
-                if count % 2000 == 0 : 
+                if count % 500 == 0 : 
                     with open("map_parameters.pkl", 'wb') as f:
                         pickle.dump([self.MAP,self.mu, self.alpha] , f)
                     self.show_MAP(count)
                 
-                # except Exception as e: 
-                #     continue
+             
     
+    
+    def shift_map(self): 
+        temp_map = -np.ones((self.MAP['sizex'], self.MAP['sizey'])).astype(np.int8)          
+        temp_free_map = np.zeros((self.MAP['sizex'], self.MAP['sizey'])).astype(np.int8)
+        index = list(np.where(self.MAP['map'] == 1))
+        index[1] -= (3750 - 2250)
+        temp_map[index] = 1
+
+        index = list(np.where(self.MAP['free'] == 1))
+        index[1] -= (3750 - 2250)
+        temp_free_map[index] = 1
+        return temp_map, temp_free_map
+
+
+
+
     def show_MAP(self,count): 
         '''
         '''
-        fig = plt.figure(figsize=(18,6))
+        temp_map, temp_free_map = self.shift_map()
 
+        fig = plt.figure(figsize=(18,6))
         ax1 = fig.add_subplot(121)
-        plt.imshow(self.MAP['map'].T,cmap="hot")
+        plt.imshow(temp_map.T, cmap = "hot")
         plt.title("Occupancy map")
 
         ax2 = fig.add_subplot(122)
+        
         plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='o', c = 'g',s = 2)
-        plt.imshow(self.MAP['free'].T,cmap="hot")
+        plt.imshow(temp_free_map.T, cmap = "hot")
         plt.title("Free space map")
         plt.savefig(f"map_{count}.png", format = 'png')
-        plt.show()
+        plt.close()
 
 
 

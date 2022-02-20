@@ -63,7 +63,7 @@ def slam():
     show_trajectory(trajectory)
 
 def show_trajectory(trajectory):
-    plt.scatter(trajectory[1][1:], trajectory[0][1:], c = 'b') 
+    plt.scatter(trajectory[0][1:], trajectory[1][1:], c = 'b') 
     plt.savefig('dead_reckon.jpg', format = 'jpg')
     plt.show(block = True)
 
