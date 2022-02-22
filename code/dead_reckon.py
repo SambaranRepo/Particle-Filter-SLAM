@@ -44,14 +44,14 @@ def slam():
     trajectory = [[], []]
     print(trajectory[0], trajectory[1])
     mu = cp.zeros(3) #Initial hypothesis
-    for count in tqdm(range(0,len(encoder_time)-1)):
+    for count in tqdm(range(2,len(encoder_time),2)):
         
-        t_p_encoder = encoder_time[count]
-        t_n_encoder = encoder_time[count+1]
+        t_p_encoder = encoder_time[count - 2]
+        t_n_encoder = encoder_time[count]
         t_n_fog = cp.asarray(np.abs(t_n_encoder - fog_time).argmin())
         t_p_fog = cp.asarray(np.abs(t_p_encoder - fog_time).argmin())
-        zl_encoder = encoder_data[count+1][0] - encoder_data[count][0] 
-        zr_encoder = encoder_data[count+1][1] - encoder_data[count][1] 
+        zl_encoder = encoder_data[count][0] - encoder_data[count-2][0] 
+        zr_encoder = encoder_data[count][1] - encoder_data[count-2][1] 
         tau = t_n_encoder - t_p_encoder
         # print(f"tau : {tau}")
         vl = cp.pi * dl * zl_encoder / (4096 * tau)
@@ -71,7 +71,12 @@ def slam():
     show_trajectory(trajectory)
 
 def show_trajectory(trajectory):
-    plt.scatter(trajectory[1][1:], trajectory[0][1:], c = 'b') 
+    arrow_properties = dict(
+            facecolor="red", width=2.5,
+            headwidth=8)
+    plt.scatter(trajectory[0][1:], trajectory[1][1:], c = 'b') 
+    plt.annotate('Start',xy = (trajectory[0][1], trajectory[1][1]), xytext=(trajectory[0][1], trajectory[1][1] - 200), arrowprops = arrow_properties)
+    plt.annotate('Finish',xy = (trajectory[0][-1], trajectory[1][-1]), xytext=(trajectory[0][-1], trajectory[1][-1] + 200), arrowprops = arrow_properties)
     plt.savefig('dead_reckon.jpg', format = 'jpg')
     plt.show(block = True)
 
