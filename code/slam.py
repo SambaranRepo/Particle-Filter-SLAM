@@ -1,3 +1,7 @@
+'''
+This program implements a Particle Filter Simultaneous Localization and Mapping (SLAM) for a robot moving 2D space and orientation in SO(2) space
+'''
+
 from distutils.command.build import build
 import numpy as np
 from glob import glob 
@@ -8,6 +12,7 @@ from matplotlib.pyplot import subplots, figure
 from tqdm import tqdm
 import pickle
 import cv2
+
 _, encoder_data = pr2_utils.read_data_from_csv('code/sensor_data/encoder.csv')
 l = len(encoder_data)
 
@@ -24,14 +29,20 @@ robot_T_FOG = np.asarray([[1,0,0,-0.335],[0,1,0,-0.035],[0, 0, 1, 0.78],[0, 0, 0
 class Slam():
 
     def __init__(self, mode, k = 2):
+        '''
+        : The map is initialized as a grid cell arrangement. 
+        : One copy of the map maintain the log odds of each cell to create the occupancy map. 
+        : Another copy creates the free space map based on log odds of each cell.
+        : Total number of particles considered is 100. The threshold for resampling is kept at 20. 
+        '''
         if mode == 1:
             self.k = k
             self.MAP = {}
             self.MAP['res']   = 0.5 #meters
-            self.MAP['xmin']  = -700 #meters
+            self.MAP['xmin']  = -200 #meters
             self.MAP['ymin']  = -800
-            self.MAP['xmax']  =  900
-            self.MAP['ymax']  =  800
+            self.MAP['xmax']  =  1000
+            self.MAP['ymax']  =  200 #800 previous
             self.MAP['sizex']  = int(np.ceil((self.MAP['xmax'] - self.MAP['xmin']) / self.MAP['res'] + 1)) #cells
             self.MAP['sizey']  = int(np.ceil((self.MAP['ymax'] - self.MAP['ymin']) / self.MAP['res'] + 1))
             self.MAP['map'] = -np.ones((self.MAP['sizex'],self.MAP['sizey']),dtype=np.int8)
@@ -63,7 +74,13 @@ class Slam():
 
     def build_map(self, sx, sy, theta, ranges): 
         '''
-        Use lidar scan and map log odds to build a map
+        : Use lidar scan and map log odds to build a map. 
+        : Ray tracing of lidar scans is done by the Bresenham Rasterisation Algorithm. 
+        : Log odds of cells that the lidar scans pass through are decreased by log4. 
+        : Log odds corresponding to cells where the lidar scans end are increased by log4. 
+        : Log odds values are capped bw -10 and 10. 
+        : If a cell has log odds > 0, that cell is classfied as occuppied, otherwise it is a free cell. 
+
         '''
         w_T_robot = np.asarray([[np.cos(theta),-np.sin(theta), 0, sx], [np.sin(theta) , np.cos(theta) , 0 , sy], [0, 0, 1, 0], [0,0,0,1]])
         
@@ -131,13 +148,18 @@ class Slam():
         # print(f"Shape of x,y, theta : {x.shape, y.shape, theta.shape}")
 
     def update_step(self, lidar): 
+        '''
+        : Transform the lidar scan to world frame using the pose of each of the robot particle. 
+        : Define a similarity criteria between the lidar scan obtained corresponding to the given particle and the current MAP. 
+        : A high similarity means that the current particle is an accurate candidate of the actual robot pose. 
+        : Each particle weight is multiplied by the obtained correlation between the transformed lidar scan and the map and they are normalized. 
+        : This way we get the updated weights of each particle. 
+        '''
         x,y,theta = self.mu[:,0], self.mu[:,1], self.mu[:,2]
         angles = np.linspace(-5, 185, 286) * np.pi/180
         valid_lidar = np.logical_and((lidar >= 0.1), (lidar < 40))
         ranges = lidar[valid_lidar]
         angles = angles[valid_lidar]
-        # print(f"angles : {angles.shape}")
-
         dx = np.cos(angles) * ranges
         dy = np.sin(angles) * ranges
         dz = [0] * len(dx)
@@ -145,9 +167,7 @@ class Slam():
         s_lidar = np.asarray([dx, dy, dz,ones])
         s_lidar = robot_T_Lidar @ s_lidar
         s_lidar = s_lidar[:3]
-        # print(f"Shape of s_lidar : {s_lidar.shape}")
         p = np.asarray([x,y,([0]*len(x))]).T[:,:,None]
-        # print(f"shape of p : {p}")
         R = np.zeros((self.N, 3, 3))
         for i in range(self.N): 
             R[i] = np.asarray([[np.cos(theta[i]), -np.sin(theta[i]), 0 ],[np.sin(theta[i]), np.cos(theta[i]), 0],[0,0,1]])
@@ -193,18 +213,20 @@ class Slam():
 
     def slam(self):
         '''
+        : Combine all functions defined above to implement a particle filter SLAM. 
+        : Our motion model is described by the Differential Drive Model. 
+        : Control inputs velocity, angular velocity are obtained from the encoder and the FOG sensor data provided in csv files. 
+        : Observations are present in the form of lidar scans. 
         '''
         lidar_time, lidar_data = pr2_utils.read_data_from_csv('code/sensor_data/lidar.csv')
         encoder_time, encoder_data = pr2_utils.read_data_from_csv('code/sensor_data/encoder.csv')
         fog_time, fog_data = pr2_utils.read_data_from_csv('code/sensor_data/fog.csv')
         lidar_time, fog_time, encoder_time = lidar_time * (10**(-9)), fog_time * (10**(-9)), encoder_time*(10**(-9))
-        w = 0 #initial angular velocity
         k = self.k
-        for count in tqdm(range(0,len(encoder_time) -1, k)):
-        # for count in tqdm(range(20001)):
+        for count in tqdm(range(0,len(encoder_time), k)):
             if count == 0: 
                 self.build_map(0,0,0,lidar_data[count])
-                # self.show_MAP(count)
+                self.show_MAP(count)
             else:
                 t_n_encoder = encoder_time[count]
                 t_p_encoder = encoder_time[count - k]
@@ -251,34 +273,42 @@ class Slam():
                     
                     self.MAP['pose'][count // k - 1][0] = x_cell
                     self.MAP['pose'][count//k - 1][1] = y_cell
-                    if count % 25000 == 0 or count == l // k -1 : 
-                        with open("map_parameters.pkl", 'wb') as f:
-                            pickle.dump([self.MAP,self.mu, self.alpha] , f)
+                    if count % 30000 == 0 : 
                         self.show_MAP(count)
+        
+        with open("map_parameters.pkl", 'wb') as f:
+            pickle.dump([self.MAP,self.mu, self.alpha] , f)
             
 
     def show_MAP(self,count): 
         '''
+        : Plot the occupancy map, free map and the robot trajectory. 
         '''
-
         fig = plt.figure(figsize=(18,6))
         ax1 = fig.add_subplot(121)
         # plt.imshow(self.MAP['map'].T, cmap = "Greys")
         plt.imshow(self.MAP['log_odds'].T, cmap = "Greys")
+        plt.gca().invert_yaxis()
         plt.title("Occupancy map")
-
+        arrow_properties = dict(
+            facecolor="red", width=2.5,
+            headwidth=8)
         ax2 = fig.add_subplot(122)
-        
-        plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='o', c = 'g',s = 2)
-        plt.imshow(~self.MAP['free'].T, cmap = "Greys")
+        plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 2)
+        plt.annotate('Start',xy = (self.MAP['pose'][4,0], self.MAP['pose'][4,1]), xytext=(100, 1600), arrowprops = arrow_properties)
+        plt.annotate('Finish',xy = (self.MAP['pose'][-3,0], self.MAP['pose'][-3,1]), xytext=(2100, 1200), arrowprops = arrow_properties)
+        plt.imshow(~self.MAP['free'].T, cmap = "hot")
+        plt.gca().invert_yaxis()
         plt.title("Free space map")
         if count == l-1 :
             plt.savefig(f"map_{count}.eps", format = 'eps')
+            plt.savefig(f"map_{count}.png", format = 'png')
         else: 
             plt.savefig(f"map_{count}.png", format = 'png')
+        plt.show(block = True)
         plt.close()
 
 if __name__ == '__main__':
-    slam = Slam(mode = 1, k = 2)
-    slam.slam()
-    slam.show_MAP(l - 1) 
+    slam = Slam(mode = 2, k = 3)
+    # slam.slam()
+    slam.show_MAP(l**2) 
