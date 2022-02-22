@@ -7,30 +7,11 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import subplots, figure
 from tqdm import tqdm
 import pickle
-import sympy
-from sympy import symbols, pprint
-from sympy import sin, cos
-from sympy import Matrix
-from sympy.utilities.lambdify import lambdify
 import cv2
 _, encoder_data = pr2_utils.read_data_from_csv('code/sensor_data/encoder.csv')
 l = len(encoder_data)
 
 dl,dr = 0.623479, 0.6228
-
-(x,y,theta, x_lidar, y_lidar) = symbols(""" x y theta x_lidar y_lidar""", real = True)
-w_T_robot = Matrix([[cos(theta) , -sin(theta), 0 , x], [sin(theta), cos(theta), 0 , y], [0,0,1,0], [0,0,0,1]])
-robot_poses = lambdify((x,y,theta), w_T_robot)
-robot_T_lid = Matrix([[0.00130201, 0.796097, 0.605167, 0.8349], \
-    [0.999999, -0.000419027, -0.00160026, -0.0126869],\
-    [-0.00102038, 0.605169, -0.796097, 1.76416], \
-    [0, 0, 0, 1]])
-w_T_lid = w_T_robot * robot_T_lid
-w_T_lid = sympy.simplify(w_T_lid)
-lidar_s_obj = Matrix([[x_lidar], [y_lidar], [0],[1]])
-w_s_object = w_T_lid * lidar_s_obj
-w_s_object = sympy.simplify(w_s_object)
-lidar_points = lambdify((x_lidar, y_lidar, x, y , theta),w_s_object )
 
 robot_T_Lidar = np.asarray([[0.00130201, 0.796097, 0.605167, 0.8349], \
     [0.999999, -0.000419027, -0.00160026, -0.0126869],\
@@ -42,25 +23,26 @@ robot_T_FOG = np.asarray([[1,0,0,-0.335],[0,1,0,-0.035],[0, 0, 1, 0.78],[0, 0, 0
 
 class Slam():
 
-    def __init__(self, mode):
+    def __init__(self, mode, k = 2):
         if mode == 1:
+            self.k = k
             self.MAP = {}
-            self.MAP['res']   = 0.75 #meters
-            self.MAP['xmin']  = -1500 #meters
-            self.MAP['ymin']  = -1500
-            self.MAP['xmax']  =  1000
-            self.MAP['ymax']  =  1000
+            self.MAP['res']   = 0.5 #meters
+            self.MAP['xmin']  = -700 #meters
+            self.MAP['ymin']  = -800
+            self.MAP['xmax']  =  900
+            self.MAP['ymax']  =  800
             self.MAP['sizex']  = int(np.ceil((self.MAP['xmax'] - self.MAP['xmin']) / self.MAP['res'] + 1)) #cells
             self.MAP['sizey']  = int(np.ceil((self.MAP['ymax'] - self.MAP['ymin']) / self.MAP['res'] + 1))
             self.MAP['map'] = -np.ones((self.MAP['sizex'],self.MAP['sizey']),dtype=np.int8)
             self.MAP['log_odds'] = np.zeros((self.MAP['sizex'], self.MAP['sizey']))
             self.MAP['free'] = np.zeros((self.MAP['sizex'], self.MAP['sizey']), dtype = np.int8)
-            self.MAP['pose'] = np.zeros((l,2))
+            self.MAP['pose'] = np.zeros((l//k,2))
             self.MAP['image'] = np.zeros((self.MAP['sizex'], self.MAP['sizey'],3))
             self.x_im = np.arange(self.MAP['xmin'],self.MAP['xmax']+self.MAP['res'],self.MAP['res'])
             self.y_im = np.arange(self.MAP['ymin'], self.MAP['ymax'] + self.MAP['res'], self.MAP['res'])
-            self.x_max_range = 1
-            self.y_max_range = 1
+            self.x_max_range = 1.25
+            self.y_max_range = 1.25
             self.x_range = np.arange(-self.x_max_range, self.x_max_range + self.MAP['res'], self.MAP['res'])
             self.y_range = np.arange(-self.y_max_range, self.y_max_range + self.MAP['res'], self.MAP['res'])
             self.x_mid = int(self.x_max_range / self.MAP['res'])
@@ -71,8 +53,8 @@ class Slam():
             self.alpha = np.full(self.N, 1 / self.N) 
             self.correlation = np.zeros(self.N,)
         elif mode == 2:
-            self.N = 300
-            self.N_threshold = 60
+            self.N = 100
+            self.N_threshold = 20
             with open("map_parameters.pkl", 'rb') as f: 
                 X = pickle.load(f)
                 self.MAP, self.mu, self.alpha = X[0], X[1], X[2]
@@ -84,17 +66,9 @@ class Slam():
         Use lidar scan and map log odds to build a map
         '''
         w_T_robot = np.asarray([[np.cos(theta),-np.sin(theta), 0, sx], [np.sin(theta) , np.cos(theta) , 0 , sy], [0, 0, 1, 0], [0,0,0,1]])
-
-        #Initialised map cells all to -1 to indicate free cells
-
-        # print(f"This is what we get from the lidar : {ranges}")
-
-        #Build map based on first lidar scan
-
-        #Get coordinates of points in lidar frame
         
         angles = np.linspace(-5,185,286) * np.pi/180
-        valid_index = np.logical_and((ranges < 40),(ranges> 0.1))
+        valid_index = np.logical_and((ranges < 60),(ranges> 0.1))
         ranges = ranges[valid_index]
         angles = angles[valid_index]
         x_lidar = np.cos(angles) * ranges
@@ -149,9 +123,11 @@ class Slam():
         N particles, resampling using stratified resampling
         '''
         theta = self.mu[:,2]
-        self.mu[:,0] += np.cos(theta) * v * tau + np.random.normal(0,0.2, self.N)
-        self.mu[:,1] += np.sin(theta) * v * tau + np.random.normal(0,0.2, self.N)
-        self.mu[:,2] += omega * tau + np.random.normal(0,0.05, self.N)
+        v = v + np.random.normal(0,0.5, self.N)
+        omega = omega + np.random.normal(0, 0.05, self.N)
+        self.mu[:,0] += np.cos(theta) * v * tau  
+        self.mu[:,1] += np.sin(theta) * v * tau 
+        self.mu[:,2] += omega * tau 
         # print(f"Shape of x,y, theta : {x.shape, y.shape, theta.shape}")
 
     def update_step(self, lidar): 
@@ -175,14 +151,10 @@ class Slam():
         R = np.zeros((self.N, 3, 3))
         for i in range(self.N): 
             R[i] = np.asarray([[np.cos(theta[i]), -np.sin(theta[i]), 0 ],[np.sin(theta[i]), np.cos(theta[i]), 0],[0,0,1]])
-        # print(f"Shape of R : {R.shape}")
-        # print(f"first rotation matrix : {R[0]}")
         w_s_lidar = R @ s_lidar + p
-        # print(f"First particle lidar scan x values : {w_s_lidar[0][0]}")
 
         for i in range(self.N): 
             w_x_obj, w_y_obj, w_z_obj = w_s_lidar[i][0],w_s_lidar[i][1],w_s_lidar[i][2]
-            # print(f"w_x_obj : {w_x_obj}")
             valid_z = np.logical_and((w_z_obj < 5), (w_z_obj > 0.3))
             w_x_cell = np.ceil((w_x_obj - self.MAP['xmin'])/self.MAP['res']).astype(np.int16) - 1
             w_y_cell = np.ceil((w_y_obj - self.MAP['ymin'])/self.MAP['res']).astype(np.int16) - 1
@@ -227,24 +199,24 @@ class Slam():
         fog_time, fog_data = pr2_utils.read_data_from_csv('code/sensor_data/fog.csv')
         lidar_time, fog_time, encoder_time = lidar_time * (10**(-9)), fog_time * (10**(-9)), encoder_time*(10**(-9))
         w = 0 #initial angular velocity
-        for count in tqdm(range(0,len(encoder_time) -1, 2)):
+        k = self.k
+        for count in tqdm(range(0,len(encoder_time) -1, k)):
         # for count in tqdm(range(20001)):
             if count == 0: 
                 self.build_map(0,0,0,lidar_data[count])
                 # self.show_MAP(count)
             else:
                 t_n_encoder = encoder_time[count]
-                t_p_encoder = encoder_time[count - 2]
+                t_p_encoder = encoder_time[count - k]
                 t_n_fog = np.abs(t_n_encoder - fog_time).argmin()
                 t_p_fog = np.abs(t_p_encoder - fog_time).argmin()
-                zl_encoder = encoder_data[count][0] - encoder_data[count-2][0] 
-                zr_encoder = encoder_data[count][1] - encoder_data[count-2][1] 
+                zl_encoder = encoder_data[count][0] - encoder_data[count-k][0] 
+                zr_encoder = encoder_data[count][1] - encoder_data[count-k][1] 
                 tau = t_n_encoder - t_p_encoder
-                # print(f"tau : {tau}")
                 vl = np.pi * dl * zl_encoder / (4096 * tau)
                 vr = np.pi * dr * zr_encoder / (4096 * tau)
                 v = (vl + vr) / 2
-                if t_n_fog > len(fog_time):
+                if t_n_fog > len(fog_time) and t_p_fog == t_n_fog:
                     pass
                 else: 
                     w = np.sum(fog_data[t_p_fog:t_n_fog , 2]) / (fog_time[t_n_fog] - fog_time[t_p_fog])
@@ -260,10 +232,11 @@ class Slam():
                     self.alpha /= np.sum(self.alpha)
 
                     best_particle = np.argmax(self.correlation)
-                    print(f"maximum correlation is {np.max(self.correlation)}")
+                    # print(f"maximum correlation is {np.max(self.correlation)}")
 
                     best_mu = self.mu[best_particle, :]
-                    print(f"Best particles is : {best_mu}")
+                    # print(f"Best particles is : {best_mu}")
+                    
                     #Build a map based on lidar scan of best particle
                     self.build_map(best_mu[0], best_mu[1], best_mu[2], lidar_data[t_n_lidar])
 
@@ -276,10 +249,9 @@ class Slam():
                     x_cell = np.ceil((best_mu[0] - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1
                     y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
                     
-                    self.MAP['pose'][count][0] = x_cell
-                    self.MAP['pose'][count][1] = y_cell
-                    # print(f"trajectory of robot: {self.MAP['pose']}")
-                    if count % 5000 == 0 : 
+                    self.MAP['pose'][count // k - 1][0] = x_cell
+                    self.MAP['pose'][count//k - 1][1] = y_cell
+                    if count % 25000 == 0 or count == l // k -1 : 
                         with open("map_parameters.pkl", 'wb') as f:
                             pickle.dump([self.MAP,self.mu, self.alpha] , f)
                         self.show_MAP(count)
@@ -291,25 +263,22 @@ class Slam():
 
         fig = plt.figure(figsize=(18,6))
         ax1 = fig.add_subplot(121)
-        plt.imshow(self.MAP['map'].T, cmap = "hot")
+        # plt.imshow(self.MAP['map'].T, cmap = "Greys")
+        plt.imshow(self.MAP['log_odds'].T, cmap = "Greys")
         plt.title("Occupancy map")
 
         ax2 = fig.add_subplot(122)
         
         plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='o', c = 'g',s = 2)
-        plt.imshow(self.MAP['free'].T, cmap = "hot")
+        plt.imshow(~self.MAP['free'].T, cmap = "Greys")
         plt.title("Free space map")
-        plt.savefig(f"map_{count}.png", format = 'png')
+        if count == l-1 :
+            plt.savefig(f"map_{count}.eps", format = 'eps')
+        else: 
+            plt.savefig(f"map_{count}.png", format = 'png')
         plt.close()
 
-
-
-
-
-
 if __name__ == '__main__':
-    slam = Slam(mode = 1)
+    slam = Slam(mode = 1, k = 2)
     slam.slam()
-    slam.show_MAP(l - 1)
-
-#Implement resampling, select time based on motion 
+    slam.show_MAP(l - 1) 
