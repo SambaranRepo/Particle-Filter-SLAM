@@ -12,9 +12,12 @@ def toc(tstart, name="Operation"):
   print('%s took: %s sec.\n' % (name,(time.time() - tstart)))
 
 
-def compute_stereo():
-  path_l = 'data/image_left.png'
-  path_r = 'data/image_right.png'
+def compute_stereo(filename, img = []):
+  # path_l = 'code/data/image_left.png'
+  # path_r = 'code/data/image_right.png'
+  path_l = f'code/stereo_images/stereo_left/{filename}.png'
+  path_r = f'code/stereo_images/stereo_right/{filename}.png' 
+  # print(path_l)
 
   image_l = cv2.imread(path_l, 0)
   image_r = cv2.imread(path_r, 0)
@@ -26,17 +29,23 @@ def compute_stereo():
   image_r_gray = cv2.cvtColor(image_r, cv2.COLOR_BGR2GRAY)
 
   # You may need to fine-tune the variables `numDisparities` and `blockSize` based on the desired accuracy
-  stereo = cv2.StereoBM_create(numDisparities=32, blockSize=9) 
+  # stereo = cv2.StereoBM_create(numDisparities=32, blockSize=9)
+  stereo = cv2.StereoBM_create(numDisparities=32, blockSize=5) 
   disparity = stereo.compute(image_l_gray, image_r_gray)
-
-  fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
-  ax1.imshow(image_l)
-  ax1.set_title('Left Image')
-  ax2.imshow(image_r)
-  ax2.set_title('Right Image')
-  ax3.imshow(disparity, cmap='gray')
-  ax3.set_title('Disparity Map')
-  plt.show()
+  img.append(disparity)
+  # print(disparity.shape)
+  # fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+  # ax1.imshow(image_l)
+  # ax1.set_title('Left Image')
+  # ax2.imshow(image_r)
+  # ax2.set_title('Right Image')
+  # fix,ax = plt.subplots(1,1)
+  # ax.imshow(disparity, cmap='gray')
+  # ax.set_title('Disparity Map')
+  # plt.savefig(f'code/disparity/disparity_{filename}.png', format = 'png')
+  # # plt.show()
+  # plt.close()
+  return img
   
 
 def read_data_from_csv(filename):
@@ -262,8 +271,8 @@ def show_lidar():
 	
 
 if __name__ == '__main__':
-  #compute_stereo()
+  compute_stereo()
   # show_lidar()
-  test_mapCorrelation()
+  # test_mapCorrelation()
   #test_bresenham2D()
   

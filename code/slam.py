@@ -49,6 +49,7 @@ class Slam():
             self.MAP['log_odds'] = np.zeros((self.MAP['sizex'], self.MAP['sizey']))
             self.MAP['free'] = np.zeros((self.MAP['sizex'], self.MAP['sizey']), dtype = np.int8)
             self.MAP['pose'] = np.zeros((l//k,2))
+            self.MAP['traj'] = np.zeros((l//k, 3))
             self.MAP['image'] = np.zeros((self.MAP['sizex'], self.MAP['sizey'],3))
             self.x_im = np.arange(self.MAP['xmin'],self.MAP['xmax']+self.MAP['res'],self.MAP['res'])
             self.y_im = np.arange(self.MAP['ymin'], self.MAP['ymax'] + self.MAP['res'], self.MAP['res'])
@@ -273,6 +274,10 @@ class Slam():
                     
                     self.MAP['pose'][count // k - 1][0] = x_cell
                     self.MAP['pose'][count//k - 1][1] = y_cell
+                    self.MAP['traj'][count //k - 1][0] = best_mu[0]
+                    self.MAP['traj'][count //k - 1][1] = best_mu[1]
+                    self.MAP['traj'][count //k - 1][2] = best_mu[2]
+
                     if count % 30000 == 0 : 
                         self.show_MAP(count)
         
@@ -305,10 +310,10 @@ class Slam():
             plt.savefig(f"map_{count}.png", format = 'png')
         else: 
             plt.savefig(f"map_{count}.png", format = 'png')
-        plt.show(block = True)
+        plt.show(block = False)
         plt.close()
 
 if __name__ == '__main__':
     slam = Slam(mode = 2, k = 3)
     # slam.slam()
-    slam.show_MAP(l**2) 
+    slam.show_MAP(l) 
