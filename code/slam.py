@@ -296,16 +296,16 @@ class Slam():
         fig = plt.figure(figsize=(18,6))
         ax1 = fig.add_subplot(121)
         # plt.imshow(self.MAP['map'].T, cmap = "Greys")
-        plt.imshow(~self.MAP['map'].T, cmap = "hot")
+        plt.imshow(self.MAP['map'].T, cmap = "hot")
         plt.gca().invert_yaxis()
         plt.title("Occupancy map")
         arrow_properties = dict(
             facecolor="red", width=2.5,
             headwidth=8)
         ax2 = fig.add_subplot(122)
-        plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 2)
-        plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 200), arrowprops = arrow_properties)
-        plt.annotate('Finish',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][-10,0], self.MAP['pose'][-10,1]), xytext=(self.MAP['pose'][-10,0] + 50, self.MAP['pose'][-10,1] + 200), arrowprops = arrow_properties)
+        plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 0.5)
+        plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 600), arrowprops = arrow_properties)
+        plt.annotate('Finish',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][-10,0], self.MAP['pose'][-10,1]), xytext=(self.MAP['pose'][-10,0] + 50, self.MAP['pose'][-10,1] + 600), arrowprops = arrow_properties)
         plt.imshow(self.MAP['free'].T, cmap = "hot")
         plt.gca().invert_yaxis()
         plt.title("Free space map")
@@ -318,6 +318,6 @@ class Slam():
         plt.close()
 
 if __name__ == '__main__':
-    slam = Slam(mode = 1, k = 3)
-    slam.slam()
+    slam = Slam(mode = 2, k = 3)
+    # slam.slam()
     slam.show_MAP(l) 
