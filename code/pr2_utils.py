@@ -30,21 +30,21 @@ def compute_stereo(filename, img = []):
 
   # You may need to fine-tune the variables `numDisparities` and `blockSize` based on the desired accuracy
   # stereo = cv2.StereoBM_create(numDisparities=32, blockSize=9)
-  stereo = cv2.StereoBM_create(numDisparities=32, blockSize=5) 
+  stereo = cv2.StereoBM_create(numDisparities=64, blockSize=9) 
   disparity = stereo.compute(image_l_gray, image_r_gray)
   img.append(disparity)
   # print(disparity.shape)
-  # fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
-  # ax1.imshow(image_l)
-  # ax1.set_title('Left Image')
-  # ax2.imshow(image_r)
-  # ax2.set_title('Right Image')
+  fig, (ax1, ax2, ax3) = plt.subplots(3, 1)
+  ax1.imshow(image_l)
+  ax1.set_title('Left Image')
+  ax2.imshow(image_r)
+  ax2.set_title('Right Image')
   # fix,ax = plt.subplots(1,1)
-  # ax.imshow(disparity, cmap='gray')
-  # ax.set_title('Disparity Map')
-  # plt.savefig(f'code/disparity/disparity_{filename}.png', format = 'png')
-  # # plt.show()
-  # plt.close()
+  ax3.imshow(disparity, cmap='gray')
+  ax3.set_title('Disparity Map')
+  plt.savefig(f'code/disparity/disparity_{filename}.png', format = 'png')
+  # plt.show(block = True)
+  plt.close()
   return img
   
 

@@ -40,7 +40,7 @@ class Slam():
             self.MAP = {}
             self.MAP['res']   = 0.5 #meters
             self.MAP['xmin']  = -200 #meters
-            self.MAP['ymin']  = -800
+            self.MAP['ymin']  = -500
             self.MAP['xmax']  =  1000
             self.MAP['ymax']  =  200 #800 previous
             self.MAP['sizex']  = int(np.ceil((self.MAP['xmax'] - self.MAP['xmin']) / self.MAP['res'] + 1)) #cells
@@ -48,8 +48,8 @@ class Slam():
             self.MAP['map'] = -np.ones((self.MAP['sizex'],self.MAP['sizey']),dtype=np.int8)
             self.MAP['log_odds'] = np.zeros((self.MAP['sizex'], self.MAP['sizey']))
             self.MAP['free'] = np.zeros((self.MAP['sizex'], self.MAP['sizey']), dtype = np.int8)
-            self.MAP['pose'] = np.zeros((l//k,2))
-            self.MAP['traj'] = np.zeros((l//k, 3))
+            self.MAP['pose'] = np.zeros((l - l % (self.k * 5),2))
+            self.MAP['traj'] = np.zeros((l - l % (self.k * 5), 3))
             self.MAP['image'] = np.zeros((self.MAP['sizex'], self.MAP['sizey'],3))
             self.x_im = np.arange(self.MAP['xmin'],self.MAP['xmax']+self.MAP['res'],self.MAP['res'])
             self.y_im = np.arange(self.MAP['ymin'], self.MAP['ymax'] + self.MAP['res'], self.MAP['res'])
@@ -272,11 +272,11 @@ class Slam():
                     x_cell = np.ceil((best_mu[0] - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1
                     y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
                     
-                    self.MAP['pose'][count // k - 1][0] = x_cell
-                    self.MAP['pose'][count//k - 1][1] = y_cell
-                    self.MAP['traj'][count //k - 1][0] = best_mu[0]
-                    self.MAP['traj'][count //k - 1][1] = best_mu[1]
-                    self.MAP['traj'][count //k - 1][2] = best_mu[2]
+                    self.MAP['pose'][count  - 5*k : count,0] = x_cell
+                    self.MAP['pose'][count  - 5*k : count,1] = y_cell
+                    self.MAP['traj'][count  - 5*k : count,0]= best_mu[0]
+                    self.MAP['traj'][count  - 5*k: count,1] = best_mu[1]
+                    self.MAP['traj'][count -5*k : count,2] = best_mu[2]
 
                     if count % 30000 == 0 : 
                         self.show_MAP(count)
@@ -292,7 +292,7 @@ class Slam():
         fig = plt.figure(figsize=(18,6))
         ax1 = fig.add_subplot(121)
         # plt.imshow(self.MAP['map'].T, cmap = "Greys")
-        plt.imshow(self.MAP['log_odds'].T, cmap = "Greys")
+        plt.imshow(~self.MAP['map'].T, cmap = "Greys")
         plt.gca().invert_yaxis()
         plt.title("Occupancy map")
         arrow_properties = dict(
@@ -300,9 +300,9 @@ class Slam():
             headwidth=8)
         ax2 = fig.add_subplot(122)
         plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 2)
-        plt.annotate('Start',xy = (self.MAP['pose'][4,0], self.MAP['pose'][4,1]), xytext=(100, 1600), arrowprops = arrow_properties)
-        plt.annotate('Finish',xy = (self.MAP['pose'][-3,0], self.MAP['pose'][-3,1]), xytext=(2100, 1200), arrowprops = arrow_properties)
-        plt.imshow(~self.MAP['free'].T, cmap = "hot")
+        plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 200), arrowprops = arrow_properties)
+        plt.annotate('Finish',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][-2,0], self.MAP['pose'][-2,1]), xytext=(self.MAP['pose'][-2,0] + 50, self.MAP['pose'][-2,1] + 200), arrowprops = arrow_properties)
+        plt.imshow(self.MAP['free'].T, cmap = "hot")
         plt.gca().invert_yaxis()
         plt.title("Free space map")
         if count == l-1 :
