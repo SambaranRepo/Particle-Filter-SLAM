@@ -38,8 +38,8 @@ class Slam():
         if mode == 1:
             self.k = k
             self.MAP = {}
-            self.MAP['res']   = 0.75 #meters
-            self.MAP['xmin']  = -1500 #meters
+            self.MAP['res']   = 0.5 #meters
+            self.MAP['xmin']  = -500 #meters
             self.MAP['ymin']  = -1500
             self.MAP['xmax']  =  1500
             self.MAP['ymax']  =  1500 #800 previous
@@ -100,7 +100,7 @@ class Slam():
         w_y_obj = w_s_obj[1]
         w_z_obj = w_s_obj[2]
         # print(f"Lidar scan z coordinate : {w_z_obj}")
-        valid_z = np.logical_and((w_z_obj > 0.3), (w_z_obj < 2))
+        valid_z = np.logical_and((w_z_obj > 0.3), (w_z_obj < 4))
 
         #Convert from meters to cells
         x_cell = np.ceil((w_x_obj - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1 
@@ -256,7 +256,7 @@ class Slam():
                     self.alpha *= np.exp(self.correlation- np.max(self.correlation))
                     self.alpha /= np.sum(self.alpha)
 
-                    best_particle = np.argmax(self.correlation)
+                    best_particle = np.argmax(self.alpha)
                     # print(f"maximum correlation is {np.max(self.correlation)}")
 
                     best_mu = self.mu[best_particle, :]
@@ -293,31 +293,29 @@ class Slam():
         '''
         : Plot the occupancy map, free map and the robot trajectory. 
         '''
-        fig = plt.figure(figsize=(18,6))
-        ax1 = fig.add_subplot(121)
+        fig1 = plt.figure(figsize=(50,10))
         # plt.imshow(self.MAP['map'].T, cmap = "Greys")
         plt.imshow(self.MAP['map'].T, cmap = "hot")
         plt.gca().invert_yaxis()
         plt.title("Occupancy map")
+        plt.savefig(f"grid_map_{count}.eps", format = 'eps')
         arrow_properties = dict(
             facecolor="red", width=2.5,
             headwidth=8)
-        ax2 = fig.add_subplot(122)
+        fig2 = plt.figure(figsize=(50,10))
         plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 0.5)
         plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 600), arrowprops = arrow_properties)
         plt.annotate('Finish',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][-10,0], self.MAP['pose'][-10,1]), xytext=(self.MAP['pose'][-10,0] + 50, self.MAP['pose'][-10,1] + 600), arrowprops = arrow_properties)
         plt.imshow(self.MAP['free'].T, cmap = "hot")
         plt.gca().invert_yaxis()
         plt.title("Free space map")
-        if count == l-1 :
-            plt.savefig(f"map_{count}.eps", format = 'eps')
-            plt.savefig(f"map_{count}.png", format = 'png')
-        else: 
-            plt.savefig(f"map_{count}.png", format = 'png')
+        
+        plt.savefig(f"map_{count}.eps", format = 'eps')
+        plt.savefig(f"map_{count}.png", format = 'png')
         plt.show(block = False)
         plt.close()
 
 if __name__ == '__main__':
-    slam = Slam(mode = 2, k = 3)
+    slam = Slam(mode =2, k = 3)
     # slam.slam()
     slam.show_MAP(l) 

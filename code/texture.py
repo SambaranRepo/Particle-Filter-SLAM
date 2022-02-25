@@ -107,7 +107,7 @@ texture_map = np.zeros((MAP['sizex'],MAP['sizey'],3)).astype(np.int16)
 def stereo_to_world(d_img, rgb_img): 
     for i in tqdm(range(len(stereo_left_t)//10)): 
         print(stereo_left_t[i])
-        z = (0.949 * sb)/d_img[i]
+        z = (K[0][0] * sb)/d_img[i]
         depth = z.reshape(1,-1)
         depth[np.where(depth == float('inf'))] = 0
         # print(depth[0,20000:25000])
@@ -122,7 +122,7 @@ def stereo_to_world(d_img, rgb_img):
         #Uptill now we got the points of the camera frame to the robot frame. Now need to get the coordinates in world frame. 
         encoder_t = np.abs(int(stereo_left_t[i])*10**(-9) - encoder_time).argmin()
         index = encoder_t
-        robot_pose = MAP['traj'][index]
+        robot_pose = MAP['traj'][index//15]
         # print(f"encoder time near to stereo time : {encoder_t}")
         # print(f"current pose at this time : {robot_pose}")
         sx,sy,theta = robot_pose[0], robot_pose[1], robot_pose[2]
@@ -187,10 +187,12 @@ texture_map_merged[free_x,free_y,:] = texture_map[free_x, free_y, :]
 arrow_properties = dict(
             facecolor="red", width=2.5,
             headwidth=8)
-plt.scatter(MAP['pose'][:,1],MAP['pose'][:,0],marker='d', c = 'g',s = 2)
+# plt.scatter(MAP['pose'][:,1],MAP['pose'][:,0],marker='d', c = 'g',s = 2)
 plt.annotate('Start',xy = (MAP['pose'][1,1], MAP['pose'][1,0]), xytext=(MAP['pose'][1,1]+100, MAP['pose'][1,0]+200), arrowprops = arrow_properties)
 plt.annotate('Finish',xy = (MAP['pose'][-10,1], MAP['pose'][-10,0]), xytext=(MAP['pose'][-10,1]+100, MAP['pose'][-10,0]+200), arrowprops = arrow_properties)
+fig = plt.figure(figsize = (22,10))
 plt.imshow(texture_map_merged)
+plt.savefig('texture_map.png', format = 'png')
 plt.show(block = True)
 
 
