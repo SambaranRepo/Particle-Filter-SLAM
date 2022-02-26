@@ -38,8 +38,8 @@ class Slam():
         if mode == 1:
             self.k = k
             self.MAP = {}
-            self.MAP['res']   = 0.5 #meters
-            self.MAP['xmin']  = -500 #meters
+            self.MAP['res']   = 0.25 #meters
+            self.MAP['xmin']  = -1500 # 1meters
             self.MAP['ymin']  = -1500
             self.MAP['xmax']  =  1500
             self.MAP['ymax']  =  1500 #800 previous
@@ -53,14 +53,14 @@ class Slam():
             self.MAP['image'] = np.zeros((self.MAP['sizex'], self.MAP['sizey'],3))
             self.x_im = np.arange(self.MAP['xmin'],self.MAP['xmax']+self.MAP['res'],self.MAP['res'])
             self.y_im = np.arange(self.MAP['ymin'], self.MAP['ymax'] + self.MAP['res'], self.MAP['res'])
-            self.x_max_range = 1.25
-            self.y_max_range = 1.25
+            self.x_max_range = 1.5
+            self.y_max_range = 1.5
             self.x_range = np.arange(-self.x_max_range, self.x_max_range + self.MAP['res'], self.MAP['res'])
             self.y_range = np.arange(-self.y_max_range, self.y_max_range + self.MAP['res'], self.MAP['res'])
             self.x_mid = int(self.x_max_range / self.MAP['res'])
             self.y_mid = int(self.y_max_range / self.MAP['res'])
             self.N = 50
-            self.N_threshold = 5
+            self.N_threshold = 10
             self.mu = np.zeros((self.N, 3))
             self.alpha = np.full(self.N, 1 / self.N) 
             self.correlation = np.zeros(self.N,)
@@ -190,8 +190,6 @@ class Slam():
             correlation_matrix = pr2_utils.mapCorrelation(self.MAP['map'],self.x_im, self.y_im, Y, self.x_range, self.y_range)
             index = np.unravel_index(np.argmax(correlation_matrix, axis = None), correlation_matrix.shape)
             self.correlation[i] = correlation_matrix[index]
-            # self.mu[i,0] += (index[0] - self.x_mid)*self.MAP['res']
-            # self.mu[i,1] += (index[1] - self.y_mid)*self.MAP['res']
         
     def resample(self): 
         '''
@@ -247,9 +245,19 @@ class Slam():
                 #Predict step
                 self.predict_step(v, tau,  w)
 
+                best_particle = np.argmax(self.alpha)
+                # print(f"maximum correlation is {np.max(self.correlation)}")
 
+                best_mu = self.mu[best_particle, :]
+                x_cell = np.ceil((best_mu[0] - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1
+                y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
+                self.MAP['pose'][count-k:count,0] = x_cell
+                self.MAP['pose'][count-k:count,1] = y_cell
+                self.MAP['traj'][count-k:count,0]= best_mu[0]
+                self.MAP['traj'][count-k:count,1] = best_mu[1]
+                self.MAP['traj'][count-k:count,2] = best_mu[2]
                 #Update step
-                if count % 5 == 0:
+                if count % 20 == 0:
                     # t_n_lidar = np.abs(t_n_encoder - lidar_time).argmin()
                     t_n_lidar = min(count, len(lidar_time) - 1)
                     self.update_step(lidar_data[t_n_lidar])
@@ -275,12 +283,11 @@ class Slam():
                     x_cell = np.ceil((best_mu[0] - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1
                     y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
                     
-                    self.MAP['pose'][count - k*5 : count,0] = x_cell
-                    self.MAP['pose'][count- k*5 : count,1] = y_cell
-                    self.MAP['traj'][count- k*5 : count,0]= best_mu[0]
-                    self.MAP['traj'][count- k*5 : count,1] = best_mu[1]
-                    self.MAP['traj'][count- k*5 : count,2] = best_mu[2]
-
+                    self.MAP['pose'][count-k:count,0] = x_cell
+                    self.MAP['pose'][count-k:count,1] = y_cell
+                    self.MAP['traj'][count-k:count,0]= best_mu[0]
+                    self.MAP['traj'][count-k:count,1] = best_mu[1]
+                    self.MAP['traj'][count-k:count,2] = best_mu[2]
                     if count % 30000 == 0 : 
                         self.show_MAP(count)
                 
@@ -295,13 +302,15 @@ class Slam():
         '''
         fig1 = plt.figure(figsize=(50,10))
         # plt.imshow(self.MAP['map'].T, cmap = "Greys")
-        plt.imshow(self.MAP['map'].T, cmap = "hot")
+        plt.imshow(~self.MAP['map'].T, cmap = "Greys")
         plt.gca().invert_yaxis()
         plt.title("Occupancy map")
-        plt.savefig(f"grid_map_{count}.eps", format = 'eps')
+        plt.savefig(f"grid_map_{count}.png", format = 'png')
         arrow_properties = dict(
             facecolor="red", width=2.5,
             headwidth=8)
+        plt.show(block = False)
+        plt.close()
         fig2 = plt.figure(figsize=(50,10))
         plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 0.5)
         plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 600), arrowprops = arrow_properties)
@@ -309,13 +318,11 @@ class Slam():
         plt.imshow(self.MAP['free'].T, cmap = "hot")
         plt.gca().invert_yaxis()
         plt.title("Free space map")
-        
-        plt.savefig(f"map_{count}.eps", format = 'eps')
         plt.savefig(f"map_{count}.png", format = 'png')
         plt.show(block = False)
         plt.close()
 
 if __name__ == '__main__':
-    slam = Slam(mode =2, k = 3)
-    # slam.slam()
+    slam = Slam(mode =1, k = 3)
+    slam.slam()
     slam.show_MAP(l) 
