@@ -6,3 +6,8 @@ stereo*
 disparity
 texture_mapping_variable.pkl
 texture_map.*
+map1/
+map2/
+texture_img.pkl
+.ipynb_checkpoints
+

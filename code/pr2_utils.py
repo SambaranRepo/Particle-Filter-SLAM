@@ -15,8 +15,8 @@ def toc(tstart, name="Operation"):
 def compute_stereo(filename, img = []):
   # path_l = 'code/data/image_left.png'
   # path_r = 'code/data/image_right.png'
-  path_l = f'code/stereo_images/stereo_left/{filename}.png'
-  path_r = f'code/stereo_images/stereo_right/{filename}.png' 
+  path_l = f'../code/stereo_images/stereo_left/{filename}.png'
+  path_r = f'../code/stereo_images/stereo_right/{filename}.png' 
   # print(path_l)
 
   image_l = cv2.imread(path_l, 0)
