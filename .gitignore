@@ -4,10 +4,12 @@ sensor_data/
 map_*
 stereo*
 disparity
-texture_mapping_variable.pkl
 texture_map.*
 map1/
 map2/
+map3/
 texture_img.pkl
+texture_img_2.pkl
+texture_mapping_variable.pkl
 .ipynb_checkpoints
 

@@ -13,6 +13,7 @@ def toc(tstart, name="Operation"):
 
 
 def compute_stereo(filename, img = []):
+# def compute_stereo():
   # path_l = 'code/data/image_left.png'
   # path_r = 'code/data/image_right.png'
   path_l = f'../code/stereo_images/stereo_left/{filename}.png'
@@ -30,9 +31,9 @@ def compute_stereo(filename, img = []):
 
   # You may need to fine-tune the variables `numDisparities` and `blockSize` based on the desired accuracy
   # stereo = cv2.StereoBM_create(numDisparities=32, blockSize=9)
-  stereo = cv2.StereoBM_create(numDisparities=96, blockSize=7) 
+  stereo = cv2.StereoBM_create(numDisparities=32, blockSize=9) 
   disparity = stereo.compute(image_l_gray, image_r_gray)
-  img.append(disparity)
+  # img.append(disparity)
   # print(disparity.shape)
   fig, (ax3) = plt.subplots(1, 1)
   # ax1.imshow(image_l)
@@ -43,7 +44,7 @@ def compute_stereo(filename, img = []):
   ax3.imshow(disparity, cmap='gray')
   ax3.set_title('Disparity Map')
   plt.savefig(f'code/disparity/disparity_{filename}.png', format = 'png')
-  # plt.show(block = True)
+  plt.show(block = True)
   plt.close()
   return img
   
