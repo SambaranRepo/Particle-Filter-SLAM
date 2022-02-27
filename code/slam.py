@@ -143,7 +143,7 @@ class Slam():
         np.random.seed(4)
         theta = self.mu[:,2]
         v = v + np.random.normal(0,0.25, self.N)
-        omega = omega + np.random.normal(0, 0.0005, self.N)
+        omega = omega + np.random.normal(0, 0.005, self.N)
         self.mu[:,0] += np.cos(theta) * v * tau  
         self.mu[:,1] += np.sin(theta) * v * tau 
         self.mu[:,2] += omega * tau 
@@ -314,7 +314,7 @@ class Slam():
         plt.show(block = False)
         plt.close()
         fig2 = plt.figure(figsize=(50,10))
-        plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 0.5)
+        plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 0.001)
         # plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 600), arrowprops = arrow_properties)
         # plt.annotate('Finish',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][-10,0], self.MAP['pose'][-10,1]), xytext=(self.MAP['pose'][-10,0] + 50, self.MAP['pose'][-10,1] + 600), arrowprops = arrow_properties)
         plt.imshow(self.MAP['free'].T, cmap = "hot")
