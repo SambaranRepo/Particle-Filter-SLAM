@@ -12,6 +12,7 @@ from matplotlib.pyplot import subplots, figure
 from tqdm import tqdm
 import pickle
 import cv2
+import time
 
 _, encoder_data = pr2_utils.read_data_from_csv('code/sensor_data/encoder.csv')
 l = len(encoder_data)
@@ -38,11 +39,11 @@ class Slam():
         if mode == 1:
             self.k = k
             self.MAP = {}
-            self.MAP['res']   = 0.5 #meters
-            self.MAP['xmin']  = -500 # 1meters
+            self.MAP['res']   = 0.75 #meters
+            self.MAP['xmin']  = -500 
             self.MAP['ymin']  = -1500
             self.MAP['xmax']  =  1500
-            self.MAP['ymax']  =  500 #800 previous
+            self.MAP['ymax']  =  500 
             self.MAP['sizex']  = int(np.ceil((self.MAP['xmax'] - self.MAP['xmin']) / self.MAP['res'] + 1)) #cells
             self.MAP['sizey']  = int(np.ceil((self.MAP['ymax'] - self.MAP['ymin']) / self.MAP['res'] + 1))
             self.MAP['map'] = -np.ones((self.MAP['sizex'],self.MAP['sizey']),dtype=np.int8)
@@ -53,14 +54,14 @@ class Slam():
             self.MAP['image'] = np.zeros((self.MAP['sizex'], self.MAP['sizey'],3))
             self.x_im = np.arange(self.MAP['xmin'],self.MAP['xmax']+self.MAP['res'],self.MAP['res'])
             self.y_im = np.arange(self.MAP['ymin'], self.MAP['ymax'] + self.MAP['res'], self.MAP['res'])
-            self.x_max_range = 1.5
-            self.y_max_range = 1.5
+            self.x_max_range = 1.25
+            self.y_max_range = 1.25
             self.x_range = np.arange(-self.x_max_range, self.x_max_range + self.MAP['res'], self.MAP['res'])
             self.y_range = np.arange(-self.y_max_range, self.y_max_range + self.MAP['res'], self.MAP['res'])
             self.x_mid = int(self.x_max_range / self.MAP['res'])
             self.y_mid = int(self.y_max_range / self.MAP['res'])
-            self.N = 200
-            self.N_threshold = 100
+            self.N = 50
+            self.N_threshold = 10
             self.mu = np.zeros((self.N, 3))
             self.alpha = np.full(self.N, 1 / self.N) 
             self.correlation = np.zeros(self.N,)
@@ -142,8 +143,8 @@ class Slam():
         '''
         np.random.seed(4)
         theta = self.mu[:,2]
-        v = v + np.random.normal(0,0.25, self.N)
-        omega = omega + np.random.normal(0, 0.005, self.N)
+        v = v + np.random.normal(0,0.5, self.N)
+        omega = omega + np.random.normal(0, 0.002, self.N)
         self.mu[:,0] += np.cos(theta) * v * tau  
         self.mu[:,1] += np.sin(theta) * v * tau 
         self.mu[:,2] += omega * tau 
@@ -190,8 +191,8 @@ class Slam():
             correlation_matrix = pr2_utils.mapCorrelation(self.MAP['map'],self.x_im, self.y_im, Y, self.x_range, self.y_range)
             index = np.unravel_index(np.argmax(correlation_matrix, axis = None), correlation_matrix.shape)
             self.correlation[i] = correlation_matrix[index]
-            self.mu[i,0] += (index[0] - self.x_mid)*self.MAP['res']
-            self.mu[i,1] += (index[1] - self.y_mid)*self.MAP['res']
+            # self.mu[i,0] += (index[0] - self.x_mid)*self.MAP['res']
+            # self.mu[i,1] += (index[1] - self.y_mid)*self.MAP['res']
         
     def resample(self): 
         '''
@@ -249,7 +250,7 @@ class Slam():
 
                 best_particle = np.argmax(self.alpha)
                 # print(f"maximum correlation is {np.max(self.correlation)}")
-
+                
                 best_mu = self.mu[best_particle, :]
                 x_cell = np.ceil((best_mu[0] - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1
                 y_cell = np.ceil((best_mu[1] - self.MAP['ymin']) / self.MAP['res'] ).astype(np.int16)-1
@@ -259,7 +260,7 @@ class Slam():
                 self.MAP['traj'][count-k:count,1] = best_mu[1]
                 self.MAP['traj'][count-k:count,2] = best_mu[2]
                 #Update step
-                if count % 5 == 0:
+                if count % 10 == 0:
                     # t_n_lidar = np.abs(t_n_encoder - lidar_time).argmin()
                     t_n_lidar = min(count, len(lidar_time) - 1)
                     self.update_step(lidar_data[t_n_lidar])
@@ -290,7 +291,7 @@ class Slam():
                     self.MAP['traj'][count-k:count,0]= best_mu[0]
                     self.MAP['traj'][count-k:count,1] = best_mu[1]
                     self.MAP['traj'][count-k:count,2] = best_mu[2]
-                    if count % 30000 == 0 : 
+                    if count % 25000 == 0 : 
                         self.show_MAP(count)
                 
         
@@ -315,6 +316,7 @@ class Slam():
         plt.close()
         fig2 = plt.figure(figsize=(50,10))
         plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 0.001)
+        # plt.scatter(self.MAP['traj'][:,0],self.MAP['traj_up'][:,1],marker='d', c = 'g',s = 0.001)
         # plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 600), arrowprops = arrow_properties)
         # plt.annotate('Finish',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][-10,0], self.MAP['pose'][-10,1]), xytext=(self.MAP['pose'][-10,0] + 50, self.MAP['pose'][-10,1] + 600), arrowprops = arrow_properties)
         plt.imshow(self.MAP['free'].T, cmap = "hot")
