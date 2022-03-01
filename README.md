@@ -53,7 +53,7 @@ This script is used to apply texture to the map using the stereo RGB images prov
 <pre>$python3 code/texture_mapping.py </pre>
 
 ## Technical Report
-* [Sambaran Ghosal. "Color Segementation and Object Detection" Feb 2022](report/Project1.pdf)
+* [Sambaran Ghosal. "Particle Filter SLAM" March 2022](report/Particle_Filter_SLAM.pdf)
 
 ## Results
 

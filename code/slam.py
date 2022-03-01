@@ -15,9 +15,8 @@ import cv2
 import time
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('N', help='Provide the number of particles that you want to use for the particle filter')
-parser.add_argument('noise', help='Enter the noise in the angular velocity', type=int)
-# parser.add_argument('file',help = 'Enter image number to test on')
+parser.add_argument('N', help='Provide the number of particles that you want to use for the particle filter', type = int)
+parser.add_argument('noise', help='Enter the noise in the angular velocity', type=float)
 args = parser.parse_args()
 N = args.N
 noise = args.noise
@@ -75,8 +74,8 @@ class Slam():
             self.alpha = np.full(self.N, 1 / self.N) 
             self.correlation = np.zeros(self.N,)
         elif mode == 2:
-            self.N = 100
-            self.N_threshold = 20
+            self.N = N
+            self.N_threshold = int(0.5 * N)
             with open("map_parameters.pkl", 'rb') as f: 
                 X = pickle.load(f)
                 self.MAP, self.mu, self.alpha = X[0], X[1], X[2]
@@ -105,13 +104,10 @@ class Slam():
         y_lidar = np.sin(angles) * ranges
         z_lidar = np.asarray([0]*len(x_lidar))
         s_lidar = np.stack((x_lidar, y_lidar, z_lidar, [1]*len(x_lidar)))
-        #Coordinates of lidar scan in vehicle frame
         w_s_obj = robot_T_Lidar @ s_lidar
-        # print(f"Vehicle frame lidar coordinates : {s_vehicle}")
         w_x_obj = w_s_obj[0]
         w_y_obj = w_s_obj[1]
         w_z_obj = w_s_obj[2]
-        # print(f"Lidar scan z coordinate : {w_z_obj}")
         valid_z = np.logical_and((w_z_obj > 0.3), (w_z_obj < 4))
 
         #Convert from meters to cells
@@ -143,7 +139,7 @@ class Slam():
         MAP['free'] = (MAP['log_odds'] < 0).astype(np.int8)
         fig = plt.figure(figsize=(8,6))
         plt.imshow(MAP['free'].T, cmap = 'hot')
-        plt.savefig(f"map_N={self.N},noise=0.5,{self.omega_noise}/first_scan.eps", format = 'eps', bbox_inches = 'tight')
+        plt.savefig("first_scan.eps", format = 'eps', bbox_inches = 'tight')
         # plt.show(block = True)
         plt.close()
 
@@ -168,13 +164,10 @@ class Slam():
         y_lidar = np.sin(angles) * ranges
         z_lidar = np.asarray([0]*len(x_lidar))
         s_lidar = np.stack((x_lidar, y_lidar, z_lidar, [1]*len(x_lidar)))
-        #Coordinates of lidar scan in vehicle frame
         w_s_obj = w_T_robot @ robot_T_Lidar @ s_lidar
-        # print(f"Vehicle frame lidar coordinates : {s_vehicle}")
         w_x_obj = w_s_obj[0]
         w_y_obj = w_s_obj[1]
         w_z_obj = w_s_obj[2]
-        # print(f"Lidar scan z coordinate : {w_z_obj}")
         valid_z = np.logical_and((w_z_obj > 0.3), (w_z_obj < 4))
 
         #Convert from meters to cells
@@ -204,11 +197,6 @@ class Slam():
         self.MAP['log_odds'][self.MAP['log_odds'] > 2] = 2
         self.MAP['map'] = (self.MAP['log_odds'] > 0).astype(np.int8)
         self.MAP['free'] = (self.MAP['log_odds'] < 0).astype(np.int8)
-        # print(f"free space : {np.where(self.MAP['free'] != 0)}")
-        # fig = plt.figure(figsize=(5,5))
-        # plt.imshow(self.MAP['free'][600:850, 1950:2200])
-        # plt.gca().invert_yaxis()
-        # plt.show(block = True)
         
 
     def predict_step(self,v, tau,omega): 
@@ -227,8 +215,7 @@ class Slam():
         self.mu[:,0] += np.cos(theta) * v * tau  
         self.mu[:,1] += np.sin(theta) * v * tau 
         self.mu[:,2] += omega * tau 
-        # print(f"Shape of x,y, theta : {x.shape, y.shape, theta.shape}")
-
+        
     def update_step(self, lidar): 
         '''
         : Transform the lidar scan to world frame using the pose of each of the robot particle. 
@@ -309,7 +296,6 @@ class Slam():
         for count in tqdm(range(0,len(encoder_time), k)):
             if count == 0: 
                 self.first_scan(0,0,0,lidar_data[count])
-                # self.show_MAP(count)
             else:
                 t_n_encoder = encoder_time[count]
                 t_p_encoder = encoder_time[count - k]
@@ -323,12 +309,11 @@ class Slam():
                 v = (vl + vr) / 2
                 
                 w = np.sum(fog_data[t_p_fog:t_n_fog , 2]) / (fog_time[t_n_fog] - fog_time[t_p_fog])
-                # print(f"Linear velocity : {v}, Angular velocity : {w}")
+                
                 #Predict step
                 self.predict_step(v, tau,  w)
 
                 best_particle = np.argmax(self.alpha)
-                # print(f"maximum correlation is {np.max(self.correlation)}")
                 
                 best_mu = self.mu[best_particle, :]
                 x_cell = np.ceil((best_mu[0] - self.MAP['xmin']) / self.MAP['res'] ).astype(np.int16)-1
@@ -339,18 +324,15 @@ class Slam():
                 self.MAP['traj'][count-k:count,1] = best_mu[1]
                 self.MAP['traj'][count-k:count,2] = best_mu[2]
                 #Update step
-                if count % 20 == 0:
-                    # t_n_lidar = np.abs(t_n_encoder - lidar_time).argmin()
+                if count % 5 == 0:
                     t_n_lidar = min(count, len(lidar_time) - 1)
                     self.update_step(lidar_data[t_n_lidar])
                     self.alpha *= np.exp(self.correlation- np.max(self.correlation))
                     self.alpha /= np.sum(self.alpha)
 
                     best_particle = np.argmax(self.alpha)
-                    # print(f"maximum correlation is {np.max(self.correlation)}")
 
                     best_mu = self.mu[best_particle, :]
-                    # print(f"Best particles is : {best_mu}")
                     
                     #Build a map based on lidar scan of best particle
                     self.build_map(best_mu[0], best_mu[1], best_mu[2], lidar_data[t_n_lidar])
@@ -358,7 +340,6 @@ class Slam():
                     #Resampling
                     N_eff = 1/(np.sum(self.alpha**2))
                     if N_eff < self.N_threshold: 
-                        # print(f"Resampling particles")
                         self.resample()
                     
                     
@@ -383,15 +364,13 @@ class Slam():
         : Plot the occupancy map, free map and the robot trajectory. 
         '''
         fig1 = plt.figure(figsize=(8,6))
-        # plt.imshow(self.MAP['map'].T, cmap = "Greys")
         plt.imshow(self.MAP['map'].T, cmap = "hot")
         plt.gca().invert_yaxis()
         plt.title("Occupancy map")
-        plt.savefig(f"map_N={self.N},noise=0.5,{self.omega_noise}/grid_map_{count}.eps", format = 'eps', bbox_inches = 'tight')
+        plt.savefig(f"grid_map_{count}.png", format = 'png', bbox_inches = 'tight')
         arrow_properties = dict(
             facecolor="red", width=2.5,
             headwidth=8)
-        # plt.show(block = True)
         plt.close()
         fig2 = plt.figure(figsize=(8,6))
         plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 0.001)
@@ -400,11 +379,10 @@ class Slam():
         plt.imshow(~self.MAP['free'].T, cmap = "Greys")
         plt.gca().invert_yaxis()
         plt.title("Free space map")
-        plt.savefig(f"map_N={self.N},noise=0.5,{self.omega_noise}/map_{count}.eps", format = 'eps', bbox_inches = 'tight')
-        # plt.show(block = False)
+        plt.savefig(f"map_{count}.png", format = 'png', bbox_inches = 'tight')
         plt.close()
 
 if __name__ == '__main__':
-    slam = Slam(mode =1, k = 1)
+    slam = Slam(mode =1, k = 3)
     slam.slam()
     slam.show_MAP(l) 
