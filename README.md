@@ -64,7 +64,7 @@ This script is used to apply texture to the map using the stereo RGB images prov
 
 
 ### Case 1 (N = 10):
-<p float="center">
+<p>
   <img src="images/grid_map_10.png" width="49%" />
   <img src="images/traj_10.png" width="49%" /> 
 </p>
