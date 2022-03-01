@@ -58,7 +58,7 @@ This script is used to apply texture to the map using the stereo RGB images prov
 ## Results
 
 ### Dead Reckoning
-<p float="left">
+<p align ="center">
   <img src="images/dead_reckon.jpg" width="75%" /> 
 </p>
 
