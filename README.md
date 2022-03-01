@@ -84,5 +84,5 @@ This script is used to apply texture to the map using the stereo RGB images prov
 
 ### Texture Mapping
 <p align ="center">
-  <img src="images/texture.png" width="75%" /> 
+  <img src="images/texture_map.png" width="75%" /> 
 </p>
