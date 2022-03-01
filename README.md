@@ -62,7 +62,7 @@ This script is used to apply texture to the map using the stereo RGB images prov
   <img src="images/dead_reckon.jpg" width="75%" /> 
 </p>
 
-
+### SLAM
 ### Case 1 (N = 10):
 <p>
   <img src="images/grid_map_10.png" width="49%" />
@@ -80,4 +80,9 @@ This script is used to apply texture to the map using the stereo RGB images prov
 <p float="left">
   <img src="images/grid_map_500.png" width="49%" />
   <img src="images/traj_500.png" width="49%" /> 
+</p>
+
+### Texture Mapping
+<p align ="center">
+  <img src="images/texture.png" width="75%" /> 
 </p>
