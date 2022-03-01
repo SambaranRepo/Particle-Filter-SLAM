@@ -61,11 +61,10 @@ robot_T_stereo = np.asarray([[-0.00680499, -0.0153215, 0.99985, 1.64239],[ -0.99
 # In[6]:
 
 
-with open('map3/map_parameters.pkl', 'rb') as f: 
+with open('trajectory.pkl', 'rb') as f: 
     X = pickle.load(f)
-    MAP = X[0]
     
-traj = MAP['traj']
+traj = X
 
 
 # In[7]:
@@ -241,7 +240,7 @@ for i in tqdm(range(len(stereo_left_t))):
     #Now time comes into play. Each stereo has a time, find corresponding encoder time and get pose of robot
     
     encoder_t = np.abs(int(stereo_left_t[i])*10**(-9) - lidar_time).argmin()
-    robot_pose = MAP['traj'][encoder_t]
+    robot_pose = traj[encoder_t]
     
     sx,sy,theta = robot_pose[0], robot_pose[1], robot_pose[2]
     
