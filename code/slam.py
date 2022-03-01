@@ -13,6 +13,14 @@ from tqdm import tqdm
 import pickle
 import cv2
 import time
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('N', help='Provide the number of particles that you want to use for the particle filter')
+parser.add_argument('noise', help='Enter the noise in the angular velocity', type=int)
+# parser.add_argument('file',help = 'Enter image number to test on')
+args = parser.parse_args()
+N = args.N
+noise = args.noise
 
 _, encoder_data = pr2_utils.read_data_from_csv('code/sensor_data/encoder.csv')
 l = len(encoder_data)
@@ -52,6 +60,7 @@ class Slam():
             self.MAP['pose'] = np.zeros((l,2))
             self.MAP['traj'] = np.zeros((l, 3))
             self.MAP['image'] = np.zeros((self.MAP['sizex'], self.MAP['sizey'],3))
+            self.omega_noise = noise
             self.x_im = np.arange(self.MAP['xmin'],self.MAP['xmax']+self.MAP['res'],self.MAP['res'])
             self.y_im = np.arange(self.MAP['ymin'], self.MAP['ymax'] + self.MAP['res'], self.MAP['res'])
             self.x_max_range = 1.25
@@ -60,8 +69,8 @@ class Slam():
             self.y_range = np.arange(-self.y_max_range, self.y_max_range + self.MAP['res'], self.MAP['res'])
             self.x_mid = int(self.x_max_range / self.MAP['res'])
             self.y_mid = int(self.y_max_range / self.MAP['res'])
-            self.N = 50
-            self.N_threshold = 10
+            self.N = N
+            self.N_threshold = int(0.5 * N)
             self.mu = np.zeros((self.N, 3))
             self.alpha = np.full(self.N, 1 / self.N) 
             self.correlation = np.zeros(self.N,)
@@ -72,6 +81,71 @@ class Slam():
                 X = pickle.load(f)
                 self.MAP, self.mu, self.alpha = X[0], X[1], X[2]
         
+
+    def first_scan(self, sx, sy, theta, ranges):
+        '''
+        Plot the first lidar scan
+        '''
+        MAP = {}
+        MAP['res']   = 0.5 #meters
+        MAP['xmin']  = -65
+        MAP['ymin']  = -65
+        MAP['xmax']  =  65
+        MAP['ymax']  =  65 
+        MAP['sizex']  = int(np.ceil((MAP['xmax'] - MAP['xmin']) / MAP['res'] + 1)) #cells
+        MAP['sizey']  = int(np.ceil((MAP['ymax'] - MAP['ymin']) / MAP['res'] + 1))
+        MAP['map'] = -np.ones((MAP['sizex'],MAP['sizey']),dtype=np.int8)
+        MAP['log_odds'] = np.zeros((MAP['sizex'], MAP['sizey']))
+        MAP['free'] = np.zeros((MAP['sizex'], MAP['sizey']), dtype = np.int8)
+        angles = np.linspace(-5,185,286) * np.pi/180
+        valid_index = np.logical_and((ranges < 60),(ranges>=0.1))
+        ranges = ranges[valid_index]
+        angles = angles[valid_index]
+        x_lidar = np.cos(angles) * ranges
+        y_lidar = np.sin(angles) * ranges
+        z_lidar = np.asarray([0]*len(x_lidar))
+        s_lidar = np.stack((x_lidar, y_lidar, z_lidar, [1]*len(x_lidar)))
+        #Coordinates of lidar scan in vehicle frame
+        w_s_obj = robot_T_Lidar @ s_lidar
+        # print(f"Vehicle frame lidar coordinates : {s_vehicle}")
+        w_x_obj = w_s_obj[0]
+        w_y_obj = w_s_obj[1]
+        w_z_obj = w_s_obj[2]
+        # print(f"Lidar scan z coordinate : {w_z_obj}")
+        valid_z = np.logical_and((w_z_obj > 0.3), (w_z_obj < 4))
+
+        #Convert from meters to cells
+        x_cell = np.ceil((w_x_obj - MAP['xmin']) / MAP['res'] ).astype(np.int16)-1 
+        y_cell = np.ceil((w_y_obj - MAP['ymin']) / MAP['res'] ).astype(np.int16)-1
+        sx_cell = np.ceil((sx - MAP['xmin']) / MAP['res'] ).astype(np.int16)-1 
+        sy_cell = np.ceil((sy - MAP['ymin']) / MAP['res'] ).astype(np.int16)-1
+          
+        valid_x = np.logical_and((x_cell < MAP['sizex']), (x_cell >= 0))
+        valid_y = np.logical_and((y_cell < MAP['sizey']), (y_cell >= 0))
+        valid_xy = np.logical_and(valid_x, valid_y)
+        valid_xyz = np.logical_and(valid_xy, valid_z)
+        x_cell = x_cell[valid_xyz]
+        y_cell = y_cell[valid_xyz]
+        w_x_obj = w_x_obj[valid_xyz]
+        w_y_obj = w_y_obj[valid_xyz]
+        output = []
+        for i in range(len(x_cell)): 
+            output.append(pr2_utils.bresenham2D(sx_cell,sy_cell,x_cell[i],y_cell[i]).astype(np.int))
+    
+        for i in range(len(output)):
+            index1 = (output[i][0][:-1])
+            index2 = (output[i][1][:-1])
+            MAP['log_odds'][index1, index2] -= np.log(4)
+        MAP['log_odds'][x_cell, y_cell] += np.log(4)
+        MAP['log_odds'][MAP['log_odds'] < -2] = -2
+        MAP['log_odds'][MAP['log_odds'] > 2] = 2
+        MAP['map'] = (MAP['log_odds'] > 0).astype(np.int8)
+        MAP['free'] = (MAP['log_odds'] < 0).astype(np.int8)
+        fig = plt.figure(figsize=(8,6))
+        plt.imshow(MAP['free'].T, cmap = 'hot')
+        plt.savefig(f"map_N={self.N},noise=0.5,{self.omega_noise}/first_scan.eps", format = 'eps', bbox_inches = 'tight')
+        # plt.show(block = True)
+        plt.close()
 
 
     def build_map(self, sx, sy, theta, ranges): 
@@ -130,6 +204,11 @@ class Slam():
         self.MAP['log_odds'][self.MAP['log_odds'] > 2] = 2
         self.MAP['map'] = (self.MAP['log_odds'] > 0).astype(np.int8)
         self.MAP['free'] = (self.MAP['log_odds'] < 0).astype(np.int8)
+        # print(f"free space : {np.where(self.MAP['free'] != 0)}")
+        # fig = plt.figure(figsize=(5,5))
+        # plt.imshow(self.MAP['free'][600:850, 1950:2200])
+        # plt.gca().invert_yaxis()
+        # plt.show(block = True)
         
 
     def predict_step(self,v, tau,omega): 
@@ -144,7 +223,7 @@ class Slam():
         np.random.seed(4)
         theta = self.mu[:,2]
         v = v + np.random.normal(0,0.5, self.N)
-        omega = omega + np.random.normal(0, 0.002, self.N)
+        omega = omega + np.random.normal(0, self.omega_noise, self.N)
         self.mu[:,0] += np.cos(theta) * v * tau  
         self.mu[:,1] += np.sin(theta) * v * tau 
         self.mu[:,2] += omega * tau 
@@ -229,8 +308,8 @@ class Slam():
         k = self.k
         for count in tqdm(range(0,len(encoder_time), k)):
             if count == 0: 
-                self.build_map(0,0,0,lidar_data[count])
-                self.show_MAP(count)
+                self.first_scan(0,0,0,lidar_data[count])
+                # self.show_MAP(count)
             else:
                 t_n_encoder = encoder_time[count]
                 t_p_encoder = encoder_time[count - k]
@@ -260,7 +339,7 @@ class Slam():
                 self.MAP['traj'][count-k:count,1] = best_mu[1]
                 self.MAP['traj'][count-k:count,2] = best_mu[2]
                 #Update step
-                if count % 10 == 0:
+                if count % 20 == 0:
                     # t_n_lidar = np.abs(t_n_encoder - lidar_time).argmin()
                     t_n_lidar = min(count, len(lidar_time) - 1)
                     self.update_step(lidar_data[t_n_lidar])
@@ -303,30 +382,29 @@ class Slam():
         '''
         : Plot the occupancy map, free map and the robot trajectory. 
         '''
-        fig1 = plt.figure(figsize=(50,10))
+        fig1 = plt.figure(figsize=(8,6))
         # plt.imshow(self.MAP['map'].T, cmap = "Greys")
-        plt.imshow(~self.MAP['map'].T, cmap = "Greys")
+        plt.imshow(self.MAP['map'].T, cmap = "hot")
         plt.gca().invert_yaxis()
         plt.title("Occupancy map")
-        plt.savefig(f"grid_map_{count}.png", format = 'png')
+        plt.savefig(f"map_N={self.N},noise=0.5,{self.omega_noise}/grid_map_{count}.eps", format = 'eps', bbox_inches = 'tight')
         arrow_properties = dict(
             facecolor="red", width=2.5,
             headwidth=8)
-        plt.show(block = False)
+        # plt.show(block = True)
         plt.close()
-        fig2 = plt.figure(figsize=(50,10))
+        fig2 = plt.figure(figsize=(8,6))
         plt.scatter(self.MAP['pose'][:,0],self.MAP['pose'][:,1],marker='d', c = 'g',s = 0.001)
-        # plt.scatter(self.MAP['traj'][:,0],self.MAP['traj_up'][:,1],marker='d', c = 'g',s = 0.001)
-        # plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 600), arrowprops = arrow_properties)
-        # plt.annotate('Finish',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][-10,0], self.MAP['pose'][-10,1]), xytext=(self.MAP['pose'][-10,0] + 50, self.MAP['pose'][-10,1] + 600), arrowprops = arrow_properties)
-        plt.imshow(self.MAP['free'].T, cmap = "hot")
+        plt.annotate('Start',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][1,0], self.MAP['pose'][1,1]), xytext=(self.MAP['pose'][1,0] - 200, self.MAP['pose'][1,1] + 150), arrowprops = arrow_properties)
+        plt.annotate('Finish',c = 'white', fontsize = 'medium', xy = (self.MAP['pose'][-10,0], self.MAP['pose'][-10,1]), xytext=(self.MAP['pose'][-10,0] + 200, self.MAP['pose'][-10,1] + 300), arrowprops = arrow_properties)
+        plt.imshow(~self.MAP['free'].T, cmap = "Greys")
         plt.gca().invert_yaxis()
         plt.title("Free space map")
-        plt.savefig(f"map_{count}.png", format = 'png')
-        plt.show(block = False)
+        plt.savefig(f"map_N={self.N},noise=0.5,{self.omega_noise}/map_{count}.eps", format = 'eps', bbox_inches = 'tight')
+        # plt.show(block = False)
         plt.close()
 
 if __name__ == '__main__':
-    slam = Slam(mode =1, k = 3)
+    slam = Slam(mode =1, k = 1)
     slam.slam()
     slam.show_MAP(l) 

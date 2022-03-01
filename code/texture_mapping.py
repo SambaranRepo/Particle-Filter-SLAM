@@ -34,9 +34,9 @@ def meta_constructor(loader, node):
     return value
 
 yaml.add_constructor(u'tag:yaml.org,2002:opencv-matrix', meta_constructor)
-left_camera = open("../code/param/left_camera.yaml")
+left_camera = open("code/param/left_camera.yaml")
 left_camera = yaml.load(left_camera, Loader = yaml.FullLoader)
-right_camera = open("../code/param/right_camera.yaml")
+right_camera = open("code/param/right_camera.yaml")
 right_camera = yaml.load(right_camera, Loader = yaml.FullLoader)
 
 
@@ -61,7 +61,7 @@ robot_T_stereo = np.asarray([[-0.00680499, -0.0153215, 0.99985, 1.64239],[ -0.99
 # In[6]:
 
 
-with open('../map3/map_parameters.pkl', 'rb') as f: 
+with open('map3/map_parameters.pkl', 'rb') as f: 
     X = pickle.load(f)
     MAP = X[0]
     
@@ -79,7 +79,7 @@ plt.scatter(traj[:,0], traj[:,1], c = 'g', s= 0.001)
 
 stereo_left_t = []
 stereo_right_t = []
-folder = "../code/stereo_images/"
+folder = "code/stereo_images/"
 
 for file in os.listdir(folder +  'stereo_left'): 
     if file.endswith('.png'): 
@@ -106,8 +106,8 @@ stereo_right_t = np.delete(stereo_right_t, index, axis = 0)
 
 
 def compute_stereo(filename, img = []):
-    path_l = f'../code/stereo_images/stereo_left/{filename}.png'
-    path_r = f'../code/stereo_images/stereo_right/{filename}.png' 
+    path_l = f'code/stereo_images/stereo_left/{filename}.png'
+    path_r = f'code/stereo_images/stereo_right/{filename}.png' 
     # print(path_l)
 
     image_l = cv2.imread(path_l, 0)
@@ -125,7 +125,7 @@ def compute_stereo(filename, img = []):
     fig, (ax3) = plt.subplots(1, 1)
     ax3.imshow(disparity, cmap='gray')
     ax3.set_title('Disparity Map')
-    plt.savefig(f'../code/disparity/disparity_{filename}.png', format = 'png')
+    plt.savefig(f'code/disparity/disparity_{filename}.png', format = 'png')
     plt.close()
     return img
 
@@ -170,7 +170,7 @@ def compute_stereo(filename, img = []):
 # In[13]:
 
 
-with open('texture_img_2.pkl', 'rb') as f: 
+with open('code/texture_img_2.pkl', 'rb') as f: 
     X = pickle.load(f)
 d_img = X[0]
 rgb_img = X[1]
@@ -179,8 +179,8 @@ rgb_img = X[1]
 # In[14]:
 
 
-plt.imshow(~d_img[0], cmap = 'Greys')
-plt.show(block = True)
+# plt.imshow(~d_img[0], cmap = 'Greys')
+# plt.show(block = True)
 
 
 # In[15]:
@@ -195,15 +195,15 @@ for i in range(len(rgb_img)):
 # In[16]:
 
 
-plt.imshow(rgb_img[0])
+# plt.imshow(rgb_img[0])
 
 
 # In[17]:
 
 
-lidar_time, lidar_data = pr2_utils.read_data_from_csv('../code/sensor_data/lidar.csv')
-encoder_time, encoder_data = pr2_utils.read_data_from_csv('../code/sensor_data/encoder.csv')
-fog_time, fog_data = pr2_utils.read_data_from_csv('../code/sensor_data/fog.csv')
+lidar_time, lidar_data = pr2_utils.read_data_from_csv('code/sensor_data/lidar.csv')
+encoder_time, encoder_data = pr2_utils.read_data_from_csv('code/sensor_data/encoder.csv')
+fog_time, fog_data = pr2_utils.read_data_from_csv('code/sensor_data/fog.csv')
 lidar_time, fog_time, encoder_time = lidar_time * (10**(-9)), fog_time * (10**(-9)), encoder_time*(10**(-9))
 
 
@@ -214,7 +214,7 @@ lidar_time, fog_time, encoder_time = lidar_time * (10**(-9)), fog_time * (10**(-
 
 xMax,yMax = 1500,400
 xMin, yMin = -300, -1500
-res = 0.75
+res = 2
 sizey = sizex = int((xMax - xMin)/res)
 texture_map_2 =  np.zeros((sizex,sizey,3)).astype(np.int16)
 
@@ -226,7 +226,7 @@ for i in tqdm(range(len(stereo_left_t))):
     disp = np.zeros((560,1280))
     disp = cv2.normalize(d_img[i], disp,  alpha=0, beta=255,norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
     z = (K[0][0] * sb)/d_img[i]
-    z[z > 100] = 0
+    z[z > 25] = 25
     depth = z.reshape(1,-1)
     uv = np.indices((560,1280))
     uv = uv.reshape((2,-1))
@@ -250,7 +250,7 @@ for i in tqdm(range(len(stereo_left_t))):
     #Get coordinates in world frame 
     xyz_world = world_T_robot @ xyz_robot #4 * (560*1280) matrix, x,y,z of each of the pixel
 #     print(f"world points : {xyz_world}")
-    ground = (xyz_world[2] > 0.2)
+    ground = np.logical_and((xyz_world[2] > -0.2), (xyz_world[2] < 0.5))
     xyz_world = xyz_world[:,ground] #select only the points that are near to the road
     
     xyz_o = xyz_o[:,ground]
@@ -263,11 +263,11 @@ for i in tqdm(range(len(stereo_left_t))):
 # In[23]:
 
 
-fig = plt.figure(figsize = (25,10))
+fig = plt.figure(figsize = (8,6))
 plt.axis('off')
 plt.imshow(texture_map_2)
+plt.savefig('texture_map.eps', format = 'eps', bbox_inches = 'tight')
 plt.show(block = True)
-
 
 # In[ ]:
 
